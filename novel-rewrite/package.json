@@ -1,0 +1,24 @@
+{
+  "name": "novel-forge",
+  "version": "1.0.0",
+  "description": "AI小说仿写引擎 - 智能复刻小说风格与架构",
+  "author": "NovelForge Team",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && uvicorn main:app --reload",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && pip install -r requirements.txt",
+    "test": "pytest",
+    "test:module": "pytest tests/"
+  },
+  "keywords": [
+    "novel",
+    "rewrite",
+    "ai",
+    "writing",
+    "fiction"
+  ]
+}
