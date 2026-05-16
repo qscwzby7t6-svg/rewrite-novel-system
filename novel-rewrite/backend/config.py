@@ -42,9 +42,39 @@ class Settings(BaseModel):
     REDIS_URL: str = "redis://localhost:6379"
     REDIS_ENABLED: bool = False
     
-    # API密钥配置
+    # LLM配置
+    DEFAULT_LLM_PROVIDER: str = "deepseek"  # 默认使用DeepSeek
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_BASE_URL: Optional[str] = None
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    
+    WENXIN_API_KEY: Optional[str] = None
+    WENXIN_BASE_URL: Optional[str] = None
+    WENXIN_MODEL: str = "ERNIE-4.0-Turbo-8K"
+    
+    QIANWEN_API_KEY: Optional[str] = None
+    QIANWEN_BASE_URL: Optional[str] = None
+    QIANWEN_MODEL: str = "qwen-turbo"
+    
+    KIMI_API_KEY: Optional[str] = None
+    KIMI_BASE_URL: Optional[str] = None
+    KIMI_MODEL: str = "moonshot-v1-8k"
+    
+    GLM_API_KEY: Optional[str] = None
+    GLM_BASE_URL: Optional[str] = None
+    GLM_MODEL: str = "glm-4-flash"
+    
     OPENAI_API_KEY: Optional[str] = None
-    ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4"
+    
+    # LLM通用参数
+    LLM_TEMPERATURE: float = 0.7
+    LLM_MAX_TOKENS: int = 2000
+    LLM_TOP_P: float = 1.0
+    LLM_PRESENCE_PENALTY: float = 0.0
+    LLM_FREQUENCY_PENALTY: float = 0.0
+    LLM_TIMEOUT: int = 60
     
     # CORS配置
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
@@ -85,7 +115,48 @@ settings = Settings()
 # 从环境变量覆盖配置
 if os.getenv("DATABASE_URL"):
     settings.DATABASE_URL = os.getenv("DATABASE_URL")
+
+# LLM配置
+if os.getenv("DEFAULT_LLM_PROVIDER"):
+    settings.DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER")
+if os.getenv("DEEPSEEK_API_KEY"):
+    settings.DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+if os.getenv("DEEPSEEK_BASE_URL"):
+    settings.DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL")
+if os.getenv("DEEPSEEK_MODEL"):
+    settings.DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL")
+
+if os.getenv("WENXIN_API_KEY"):
+    settings.WENXIN_API_KEY = os.getenv("WENXIN_API_KEY")
+if os.getenv("WENXIN_BASE_URL"):
+    settings.WENXIN_BASE_URL = os.getenv("WENXIN_BASE_URL")
+if os.getenv("WENXIN_MODEL"):
+    settings.WENXIN_MODEL = os.getenv("WENXIN_MODEL")
+
+if os.getenv("QIANWEN_API_KEY"):
+    settings.QIANWEN_API_KEY = os.getenv("QIANWEN_API_KEY")
+if os.getenv("QIANWEN_BASE_URL"):
+    settings.QIANWEN_BASE_URL = os.getenv("QIANWEN_BASE_URL")
+if os.getenv("QIANWEN_MODEL"):
+    settings.QIANWEN_MODEL = os.getenv("QIANWEN_MODEL")
+
+if os.getenv("KIMI_API_KEY"):
+    settings.KIMI_API_KEY = os.getenv("KIMI_API_KEY")
+if os.getenv("KIMI_BASE_URL"):
+    settings.KIMI_BASE_URL = os.getenv("KIMI_BASE_URL")
+if os.getenv("KIMI_MODEL"):
+    settings.KIMI_MODEL = os.getenv("KIMI_MODEL")
+
+if os.getenv("GLM_API_KEY"):
+    settings.GLM_API_KEY = os.getenv("GLM_API_KEY")
+if os.getenv("GLM_BASE_URL"):
+    settings.GLM_BASE_URL = os.getenv("GLM_BASE_URL")
+if os.getenv("GLM_MODEL"):
+    settings.GLM_MODEL = os.getenv("GLM_MODEL")
+
 if os.getenv("OPENAI_API_KEY"):
     settings.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if os.getenv("ANTHROPIC_API_KEY"):
-    settings.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+if os.getenv("OPENAI_BASE_URL"):
+    settings.OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+if os.getenv("OPENAI_MODEL"):
+    settings.OPENAI_MODEL = os.getenv("OPENAI_MODEL")

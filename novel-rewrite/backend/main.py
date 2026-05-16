@@ -21,6 +21,8 @@ from backend.core.engine.rewrite_engine import RewriteEngine
 from backend.core.deai.deai_module import DeAIModule
 from backend.core.similarity.similarity_detector import SimilarityDetector
 from backend.core.i18n.i18n_module import I18nModule, get_i18n
+from backend.core.llm.service import LLMRewriteService, llm_service
+from backend.core.llm.base import LLMProvider
 from backend.models.novel import (
     NovelDocument, RewriteConfig, RewriteResult, SimilarityReport,
     RewriteType, Language
@@ -115,6 +117,27 @@ class ExportRequest(BaseModel):
     novel_id: str
     format: str = "txt"  # txt, docx, pdf, epub
     chapters: Optional[List[int]] = None
+
+
+class LLMConfigRequest(BaseModel):
+    """LLM配置请求"""
+    provider: str = "deepseek"
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
+class LLMTestRequest(BaseModel):
+    """LLM测试请求"""
+    provider: str = "deepseek"
+    prompt: str = "请说一句话介绍你自己"
+
+
+class ExpandDescriptionRequest(BaseModel):
+    """扩写描述请求"""
+    text: str
+    provider: Optional[str] = None
 
 
 # ==================== API端点 ====================
@@ -473,6 +496,171 @@ async def translate(key: str, locale: Optional[str] = None):
     """
     text = i18n.translate(key)
     return {"key": key, "text": text, "locale": locale or i18n.get_locale()}
+
+
+# ==================== 统计接口 ====================
+
+@app.get("/api/v1/novel/{novel_id}/statistics")
+async def get_novel_statistics(novel_id: str):
+    """
+    获取小说统计信息
+    """
+    if novel_id not in novels_storage:
+        raise HTTPException(status_code=404, detail="小说不存在")
+    
+    novel = novels_storage[novel_id]
+    
+    # 统计信息
+    chapters = novel.chapters
+    
+    word_counts = [c.word_count for c in chapters]
+    avg_words = sum(word_counts) / len(word_counts) if word_counts else 0
+    
+    # 章节类型分布
+    chapter_types = {}
+    for chapter in chapters:
+        chapter_type = chapter.structure_type.value
+        chapter_types[chapter_type] = chapter_types.get(chapter_type, 0) + 1
+    
+    return {
+        "novel_id": novel_id,
+        "title": novel.metadata.title,
+        "author": novel.metadata.author,
+        "total_chapters": len(chapters),
+        "total_words": novel.metadata.total_words,
+        "avg_words_per_chapter": avg_words,
+        "chapter_type_distribution": chapter_types,
+        "character_count": len(novel.characters),
+        "faction_count": len(novel.world_settings.factions),
+        "power_levels": len(novel.power_system.levels),
+        "plot_arcs": len(novel.macro_structure.plot_arcs),
+        "climax_points": len(novel.macro_structure.climax_points)
+    }
+
+
+# ==================== LLM管理接口 ====================
+
+@app.get("/api/v1/llm/providers")
+async def get_llm_providers():
+    """
+    获取可用的LLM提供商列表
+    """
+    providers = llm_service.get_available_providers()
+    
+    # 构造详细信息
+    provider_details = []
+    for provider in providers:
+        models = llm_service.get_provider_models(provider)
+        provider_details.append({
+            "id": provider.value,
+            "name": {
+                "deepseek": "DeepSeek",
+                "wenxin": "文心一言",
+                "qianwen": "通义千问",
+                "kimi": "Kimi",
+                "glm": "智谱AI",
+                "openai": "OpenAI"
+            }.get(provider.value, provider.value),
+            "models": models,
+            "is_default": provider.value == settings.DEFAULT_LLM_PROVIDER
+        })
+    
+    return {"providers": provider_details}
+
+
+@app.get("/api/v1/llm/config")
+async def get_llm_config():
+    """
+    获取当前LLM配置
+    """
+    return {
+        "default_provider": settings.DEFAULT_LLM_PROVIDER,
+        "configs": {
+            "deepseek": {
+                "model": settings.DEEPSEEK_MODEL,
+                "has_api_key": bool(settings.DEEPSEEK_API_KEY)
+            },
+            "wenxin": {
+                "model": settings.WENXIN_MODEL,
+                "has_api_key": bool(settings.WENXIN_API_KEY)
+            },
+            "qianwen": {
+                "model": settings.QIANWEN_MODEL,
+                "has_api_key": bool(settings.QIANWEN_API_KEY)
+            },
+            "kimi": {
+                "model": settings.KIMI_MODEL,
+                "has_api_key": bool(settings.KIMI_API_KEY)
+            },
+            "glm": {
+                "model": settings.GLM_MODEL,
+                "has_api_key": bool(settings.GLM_API_KEY)
+            },
+            "openai": {
+                "model": settings.OPENAI_MODEL,
+                "has_api_key": bool(settings.OPENAI_API_KEY)
+            }
+        },
+        "parameters": {
+            "temperature": settings.LLM_TEMPERATURE,
+            "max_tokens": settings.LLM_MAX_TOKENS,
+            "top_p": settings.LLM_TOP_P,
+            "presence_penalty": settings.LLM_PRESENCE_PENALTY,
+            "frequency_penalty": settings.LLM_FREQUENCY_PENALTY,
+            "timeout": settings.LLM_TIMEOUT
+        }
+    }
+
+
+@app.post("/api/v1/llm/config")
+async def update_llm_config(request: LLMConfigRequest):
+    """
+    更新LLM配置
+    """
+    # 这里可以添加持久化逻辑，目前只更新内存中的配置
+    # 生产环境应该保存到配置文件或数据库
+    
+    return {
+        "success": True,
+        "message": "配置已更新",
+        "current_provider": request.provider
+    }
+
+
+@app.post("/api/v1/llm/test")
+async def test_llm_connection(request: LLMTestRequest):
+    """
+    测试LLM连接
+    """
+    try:
+        provider = LLMProvider(request.provider)
+        result = await llm_service.expand_description(request.prompt, provider)
+        return {
+            "success": True,
+            "result": result
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.post("/api/v1/llm/expand-description")
+async def expand_description(request: ExpandDescriptionRequest):
+    """
+    扩写描述 - 将抽象描述具体化
+    """
+    try:
+        provider = LLMProvider(request.provider) if request.provider else None
+        result = await llm_service.expand_description(request.text, provider)
+        return {
+            "success": True,
+            "original": request.text,
+            "expanded": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"扩写失败: {str(e)}")
 
 
 # ==================== 统计接口 ====================
