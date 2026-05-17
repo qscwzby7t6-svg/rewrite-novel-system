@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 from backend.config import settings
 from backend.core.llm.base import LLMConfig, LLMProvider, ChatMessage
 from backend.core.llm.factory import LLMManager, LLMFactory
-from backend.models.novel import NovelDocument, Chapter, Character
+from backend.models.novel import NovelDocument, Chapter, Character, ChapterContext
 
 
 class LLMRewriteService:
@@ -248,6 +248,133 @@ class LLMRewriteService:
     def get_provider_models(self, provider: LLMProvider) -> list:
         """获取指定提供商的模型列表"""
         return LLMFactory.get_default_models(provider)
+    
+    async def rewrite_chapter_with_context(
+        self,
+        original_chapter: Chapter,
+        main_character: Character,
+        world_settings: Dict[str, Any],
+        context: ChapterContext,
+        provider: Optional[LLMProvider] = None
+    ) -> str:
+        """
+        带上下文信息仿写单个章节
+        
+        规则：仿写第N章前，必须阅读原小说和仿写小说的N-5到N-1章
+        
+        Args:
+            original_chapter: 要仿写的原文章节
+            main_character: 主要角色
+            world_settings: 世界观设定
+            context: 上下文信息（包含前N章的原文和仿写内容）
+            provider: LLM提供商
+        
+        Returns:
+            str: 仿写后的章节内容
+        """
+        manager = self._get_manager(provider)
+        
+        system_prompt = self._build_system_prompt(world_settings)
+        rewrite_prompt = self._build_context_chapter_prompt(
+            original_chapter, 
+            main_character, 
+            context
+        )
+        
+        return await manager.generate_text(
+            prompt=rewrite_prompt,
+            system_prompt=system_prompt
+        )
+    
+    def _build_context_chapter_prompt(
+        self, 
+        chapter: Chapter, 
+        main_character: Character,
+        context: ChapterContext
+    ) -> str:
+        """
+        构建带上下文的章节仿写提示词
+        
+        严格遵循阅读上下文规则：
+        - 必须包含前N章的原文内容
+        - 必须包含前N章的仿写内容
+        - 确保内容的连贯性
+        
+        Args:
+            chapter: 要仿写的原文章节
+            main_character: 主要角色
+            context: 上下文信息
+        
+        Returns:
+            str: 完整的提示词
+        """
+        # 构建上下文摘要
+        context_summary = self._build_context_summary(context)
+        
+        return f"""请基于以下信息仿写新的章节内容，要求：
+
+【重要规则】
+1. 仿写第{context.chapter_number}章前，必须先阅读下面的前几章上下文
+2. 保持剧情的连贯性和一致性
+3. 替换人物名称和地点名称
+4. 重新安排情节发展
+5. 保持相似的风格
+6. 确保内容原创，不要直接复制原文
+
+【阅读上下文（必读）】
+{context_summary}
+
+【当前要仿写的章节信息】
+标题：{chapter.title}
+字数：{chapter.word_count}
+类型：{chapter.structure_type}
+
+【主要角色信息】
+姓名：{main_character.name}
+性格：{', '.join(main_character.personality_traits)}
+
+【原章节内容】
+{chapter.content}
+
+请直接输出仿写后的新章节："""
+    
+    def _build_context_summary(self, context: ChapterContext) -> str:
+        """
+        构建上下文摘要
+        
+        Args:
+            context: 上下文信息
+        
+        Returns:
+            str: 格式化的上下文摘要
+        """
+        summary = []
+        
+        # 添加原文上下文
+        if context.original_chapters:
+            summary.append("=== 原文前几章内容 ===")
+            for i, (title, content) in enumerate(zip(context.original_chapter_titles, context.original_chapters)):
+                chapter_num = context.chapter_number - len(context.original_chapters) + i
+                summary.append(f"--- 原文第{chapter_num}章：{title} ---")
+                # 截取前1000字符，避免过长
+                preview = content[:1000] + "..." if len(content) > 1000 else content
+                summary.append(preview)
+                summary.append("")
+        
+        # 添加已仿写内容上下文
+        if context.rewritten_chapters:
+            summary.append("=== 已仿写的前几章内容 ===")
+            for i, (title, content) in enumerate(zip(context.rewritten_chapter_titles, context.rewritten_chapters)):
+                chapter_num = context.chapter_number - len(context.rewritten_chapters) + i
+                summary.append(f"--- 仿写第{chapter_num}章：{title} ---")
+                preview = content[:1000] + "..." if len(content) > 1000 else content
+                summary.append(preview)
+                summary.append("")
+        
+        if not summary:
+            summary.append("（无前置章节）")
+        
+        return '\n'.join(summary)
 
 
 # 全局LLM服务实例

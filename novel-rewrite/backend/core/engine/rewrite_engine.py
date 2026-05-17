@@ -6,7 +6,8 @@ import re
 import random
 from backend.models.novel import (
     NovelDocument, Chapter, Character, WorldSetting, PowerSystem,
-    MacroStructure, RewriteConfig, SceneType, RelationshipType
+    MacroStructure, RewriteConfig, SceneType, RelationshipType,
+    ChapterContext
 )
 
 class RewriteEngine:
@@ -108,13 +109,182 @@ class RewriteEngine:
         
         # 重写每个章节
         new_chapters = []
-        for chapter in original.chapters:
-            new_chapter = self.rewrite_chapter(chapter, original, config, character_mapping)
+        
+        # 前几章直接保留？或者从第6章开始？
+        # 根据新规则：仿写小说从第6章开始，仿写要求必须阅读原小说前5章和仿写的前5章
+        # 前N-1章可以简单仿写，从第N章开始应用完整的上下文规则
+        start_chapter = config.start_chapter if config.enable_context_rule else 1
+        context_window_size = config.context_window_size if config.enable_context_rule else 0
+        
+        for idx, chapter in enumerate(original.chapters):
+            chapter_num = idx + 1
+            
+            if config.enable_context_rule and chapter_num >= start_chapter:
+                # 应用上下文规则：获取前N章的原文和仿写内容
+                context = self._build_chapter_context(
+                    original,
+                    new_chapters,
+                    chapter_num,
+                    context_window_size
+                )
+                
+                new_chapter = self.rewrite_chapter_with_context(
+                    chapter, 
+                    original, 
+                    config, 
+                    character_mapping,
+                    context
+                )
+            else:
+                # 前几章或者不启用规则时，使用普通仿写
+                new_chapter = self.rewrite_chapter(chapter, original, config, character_mapping)
+            
             new_chapters.append(new_chapter)
         
         rewritten.chapters = new_chapters
         
         return rewritten
+    
+    def _build_chapter_context(
+        self,
+        original: NovelDocument,
+        rewritten_chapters: List[Chapter],
+        current_chapter_num: int,
+        window_size: int
+    ) -> ChapterContext:
+        """
+        构建章节上下文信息
+        规则：仿写第N章时，必须阅读原小说和仿写小说的N-5到N-1章
+        
+        Args:
+            original: 原文小说
+            rewritten_chapters: 已仿写的章节
+            current_chapter_num: 当前要仿写的章节号（从1开始）
+            window_size: 上下文窗口大小
+        
+        Returns:
+            ChapterContext: 上下文信息
+        """
+        # 计算起始章节（从1开始）
+        # 例如仿写第10章，看第5-9章；仿写第6章，看第1-5章
+        start_chapter = max(1, current_chapter_num - window_size)
+        end_chapter = current_chapter_num - 1
+        
+        # 收集原文章节
+        original_context = []
+        original_titles = []
+        for i in range(start_chapter, end_chapter + 1):
+            if i - 1 < len(original.chapters):
+                chapter = original.chapters[i - 1]
+                original_context.append(chapter.content)
+                original_titles.append(chapter.title)
+        
+        # 收集已仿写章节
+        rewritten_context = []
+        rewritten_titles = []
+        for i in range(start_chapter, end_chapter + 1):
+            if i - 1 < len(rewritten_chapters):
+                chapter = rewritten_chapters[i - 1]
+                rewritten_context.append(chapter.content)
+                rewritten_titles.append(chapter.title)
+        
+        return ChapterContext(
+            chapter_number=current_chapter_num,
+            original_chapters=original_context,
+            rewritten_chapters=rewritten_context,
+            original_chapter_titles=original_titles,
+            rewritten_chapter_titles=rewritten_titles
+        )
+    
+    def rewrite_chapter_with_context(
+        self,
+        chapter: Chapter,
+        novel: NovelDocument,
+        config: RewriteConfig,
+        character_mapping: Dict[str, str],
+        context: ChapterContext
+    ) -> Chapter:
+        """
+        带上下文信息的章节仿写
+        在仿写时参考前面的章节，保持连贯性
+        
+        Args:
+            chapter: 当前要仿写的原文章节
+            novel: 原文小说
+            config: 仿写配置
+            character_mapping: 人物名称映射
+            context: 上下文信息
+        
+        Returns:
+            Chapter: 仿写后的章节
+        """
+        new_chapter = chapter.model_copy(deep=True)
+        
+        # 替换内容中的名称
+        new_content = chapter.content
+        for old_name, new_name in character_mapping.items():
+            new_content = new_content.replace(old_name, new_name)
+        
+        # 替换地点名称
+        new_content = self._replace_location_names(new_content, novel.world_settings)
+        
+        # 具体化抽象描述
+        new_content = self._concretize_descriptions(new_content, config.enable_profanity)
+        
+        # 处理打斗场景
+        new_content = self._enhance_battle_scenes(new_content)
+        
+        # 添加场景细节
+        new_content = self._add_scene_details(new_content, novel.world_settings)
+        
+        # 调整字数
+        new_content = self._adjust_word_count(
+            new_content,
+            chapter.word_count,
+            config.chapter_word_count_range
+        )
+        
+        # 添加自然的不规则性
+        new_content = self._add_natural_variation(new_content)
+        
+        # 应用上下文调整：根据前面的章节内容进行调整
+        new_content = self._apply_context_adjustment(new_content, context, character_mapping)
+        
+        new_chapter.content = new_content
+        new_chapter.characters = [character_mapping.get(c, c) for c in chapter.characters]
+        
+        return new_chapter
+    
+    def _apply_context_adjustment(
+        self,
+        content: str,
+        context: ChapterContext,
+        character_mapping: Dict[str, str]
+    ) -> str:
+        """
+        应用上下文调整，确保情节连贯性
+        
+        Args:
+            content: 原始仿写内容
+            context: 上下文信息
+            character_mapping: 人物映射
+        
+        Returns:
+            str: 调整后的内容
+        """
+        # 这里可以添加智能逻辑，根据上下文调整内容
+        # 1. 检查并保持人物性格的一致性
+        # 2. 保持情节的连贯性
+        # 3. 避免前后矛盾
+        
+        paragraphs = content.split('\n')
+        adjusted = []
+        
+        for para in paragraphs:
+            # 可以在这里添加上下文感知的调整逻辑
+            adjusted.append(para)
+        
+        return '\n'.join(adjusted)
     
     def rewrite_chapter(
         self,

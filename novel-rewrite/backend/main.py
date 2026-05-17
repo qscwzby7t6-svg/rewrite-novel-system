@@ -90,6 +90,10 @@ class RewriteRequest(BaseModel):
     enable_profanity: bool = False
     start_chapter: int = 1
     end_chapter: Optional[int] = None
+    # 新规则配置
+    enable_context_rule: bool = True  # 是否启用阅读上下文规则
+    context_window_size: int = 5  # 上下文窗口大小（默认5章）
+    start_context_chapter: int = 6  # 从第几章开始应用上下文规则
 
 class RewriteResponse(BaseModel):
     """仿写响应"""
@@ -322,14 +326,18 @@ async def execute_rewrite_task(task_id: str, novel_id: str, request: RewriteRequ
         
         novel = novels_storage[novel_id]
         
-        # 配置仿写参数
+        # 配置仿写参数（包含新的上下文规则）
         config = RewriteConfig(
             main_character_name=request.main_character_name,
             main_character_gender=request.main_character_gender,
             rewrite_type=request.rewrite_type,
             target_language=request.target_language,
             similarity_threshold=request.similarity_threshold,
-            enable_profanity=request.enable_profanity
+            enable_profanity=request.enable_profanity,
+            # 新规则配置
+            enable_context_rule=request.enable_context_rule,
+            context_window_size=request.context_window_size,
+            start_chapter=request.start_context_chapter
         )
         
         # 执行仿写

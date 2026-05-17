@@ -183,6 +183,20 @@ class RewriteConfig(BaseModel):
     enable_profanity: bool = False  # 是否允许脏话
     preserve_word_count: bool = True  # 是否保持字数
     chapter_word_count_range: tuple = (3000, 5000)
+    
+    # 新规则：阅读上下文配置
+    enable_context_rule: bool = True  # 是否启用阅读上下文规则
+    context_window_size: int = 5  # 上下文窗口大小（默认5章）
+    start_chapter: int = 6  # 从第几章开始仿写（默认第6章）
+
+
+class ChapterContext(BaseModel):
+    """章节生成时使用的上下文信息"""
+    chapter_number: int  # 当前要生成的章节号
+    original_chapters: List[str]  # 原文的前N章内容
+    rewritten_chapters: List[str]  # 已仿写的前N章内容
+    original_chapter_titles: List[str]  # 原文前N章标题
+    rewritten_chapter_titles: List[str]  # 已仿写前N章标题
 
 class RewriteResult(BaseModel):
     """仿写结果"""

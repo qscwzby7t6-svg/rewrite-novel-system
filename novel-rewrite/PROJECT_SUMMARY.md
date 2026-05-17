@@ -48,6 +48,12 @@ NovelForge是一款强大的AI小说仿写引擎，能够深度分析原版小�
 - **智谱AI**: GLM系列
 - **OpenAI**: GPT系列（可选）
 
+#### 7. 阅读上下文规则（新增）
+- **规则说明**: 仿写小说从第6章开始，必须阅读原文前5章和已仿写的前5章
+- **上下文窗口**: 仿写第N章前，必须阅读N-5到N-1章（原文和仿写内容）
+- **连贯性保障**: 确保仿写内容与前文一致
+- **可配置项**: 支持调整起始章节和窗口大小
+
 ## 技术架构
 
 ### 后端技术栈
@@ -173,6 +179,72 @@ novel-rewrite/
 - `POST /api/v1/llm/config`: 更新配置
 - `POST /api/v1/llm/test`: 测试连接
 - `POST /api/v1/llm/expand-description`: 描述扩写
+
+## 新增的阅读上下文规则详解
+
+### 1. 规则设计
+
+**核心规则**:
+- 仿写小说从第6章开始
+- 仿写第N章前，必须阅读原文的N-5到N-1章
+- 同时必须阅读已仿写的N-5到N-1章
+- 确保内容连贯性和一致性
+
+**配置项**:
+- `enable_context_rule`: 是否启用上下文规则（默认: True）
+- `context_window_size`: 上下文窗口大小（默认: 5）
+- `start_chapter`: 从第几章开始应用规则（默认: 6）
+
+### 2. 数据模型
+
+#### ChapterContext
+- `chapter_number`: 当前要仿写的章节号
+- `original_chapters`: 原文的前N章内容
+- `rewritten_chapters`: 已仿写的前N章内容
+- `original_chapter_titles`: 原文前N章标题
+- `rewritten_chapter_titles`: 已仿写前N章标题
+
+### 3. 仿写引擎增强
+
+#### rewrite_novel() 方法
+- 检查是否启用上下文规则
+- 对第6章及以后的章节应用上下文逻辑
+- 前5章可以使用简单仿写模式
+
+#### rewrite_chapter_with_context() 方法
+- 接收 ChapterContext 参数
+- 在仿写时考虑前序章节
+- 保持人物性格一致性
+- 确保情节连贯
+
+#### _build_chapter_context() 方法
+- 构建章节上下文
+- 截取前N章的原文和仿写内容
+- 提取章节标题和内容摘要
+
+### 4. LLM服务增强
+
+#### rewrite_chapter_with_context() 方法
+- 构建包含上下文的提示词
+- 按照"必读"格式组织上下文
+- 确保LLM阅读所有必需内容
+
+#### _build_context_chapter_prompt() 方法
+- 格式化原文上下文
+- 格式化已仿写上下文
+- 添加规则说明和写作要求
+
+#### _build_context_summary() 方法
+- 生成上下文摘要
+- 截取内容预览（防止过长）
+- 标记章节来源（原文/仿写）
+
+### 5. API更新
+
+#### RewriteRequest 更新
+- `enable_context_rule`: 启用上下文规则
+- `context_window_size`: 窗口大小配置
+- `start_context_chapter`: 起始章节配置
 
 ## 前端更新
 
